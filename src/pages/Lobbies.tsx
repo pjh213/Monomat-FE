@@ -14,6 +14,7 @@ import {
     LOBBY_ROUTES,
 } from '../constants/lobby';
 import { useLobbyList, useLobbyTotalPages } from '../hooks/useLobbyList';
+import { useLobbyListSocket } from '../hooks/useLobbyListSocket';
 import {
     SORT_QUERY_MAP,
     type LobbyCategory,
@@ -30,6 +31,9 @@ function toMapCategory(
 
 export function Lobbies() {
     const navigate = useNavigate();
+
+    // 다른 사용자의 로비 생성/입장/퇴장/강퇴 시 목록을 실시간 갱신한다.
+    useLobbyListSocket();
 
     const [searchKeyword, setSearchKeyword] = useState('');
     const [selectedCategory, setSelectedCategory] =

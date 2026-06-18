@@ -17,6 +17,21 @@ export const SOCKET_PUBLISH = {
     // code는 로비의 6자리 초대 코드이다.
     // 예 : SOCKET_PUBLISH.CHAT_LOBBY('ABC123') → '/app/chat/lobby/ABC123'
     CHAT_LOBBY: (code: string) => `/app/chat/lobby/${code}`,
+
+    // 로비 생성 후 목록 화면의 실시간 갱신을 트리거한다. (body 없음)
+    // 서버는 이 신호를 받으면 /topic/lobby/refresh로 REFRESH_LOBBY_LIST를 브로드캐스트한다.
+    LOBBY_CREATE: '/app/lobby/create',
+
+    // 로비 상세 정보 갱신을 요청한다. (body 없음, 참가자만)
+    // 서버는 /topic/lobby/{code}/refresh로 REFRESH_LOBBY_INFO를 브로드캐스트한다.
+    LOBBY_UPDATE: (code: string) => `/app/lobby/${code}/update`,
+
+    // 명시적 퇴장을 알린다. (body 없음)
+    // 서버는 LEAVE 시스템 메시지와 정보/목록 갱신 신호를 브로드캐스트한다.
+    LOBBY_LEAVE: (code: string) => `/app/lobby/${code}/leave`,
+
+    // 방장이 특정 참가자를 강퇴한다. body: { targetUserIdentifier(UUID) }
+    LOBBY_KICK: (code: string) => `/app/lobby/${code}/kick`,
 } as const;
 
 // 구독 경로 (서버 → 클라이언트)
@@ -36,9 +51,15 @@ export const SOCKET_SUBSCRIBE = {
 
     // 특정 로비의 게임 시작 이벤트를 수신한다.
     LOBBY_GAME: (code: string) => `/topic/lobby/${code}/game`,
+
+    // 로비 목록 전체 갱신 신호를 수신한다. (생성/입장/퇴장/강퇴 시 브로드캐스트)
+    LOBBY_LIST_REFRESH: '/topic/lobby/refresh',
 } as const;
 
 export const SOCKET_MESSAGES = {
     REFRESH_LOBBY_INFO: 'REFRESH_LOBBY_INFO',
+    REFRESH_LOBBY_LIST: 'REFRESH_LOBBY_LIST',
     GAME_STARTED: 'GAME_STARTED',
+    // /topic/lobby/{code} 채널 시스템 메시지 type. 강퇴 대상 식별에 사용한다.
+    KICK: 'KICK',
 } as const;

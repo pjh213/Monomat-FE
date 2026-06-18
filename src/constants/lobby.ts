@@ -193,6 +193,11 @@ export const LOBBY_ROOM_COPY = {
     READY_CHANGE_FAILED: '준비 상태 변경에 실패했습니다.',
     START_FAILED: '게임 시작에 실패했습니다.',
     INVALID_INVITE_CODE: '초대 코드가 올바르지 않습니다.',
+    KICK_PLAYER: '강퇴',
+    KICK_PLAYER_ARIA: (name: string) => `${name} 강퇴`,
+    KICK_CONFIRM: (name: string) => `${name}님을 강퇴하시겠습니까?`,
+    KICK_FAILED: '참가자 강퇴에 실패했습니다.',
+    KICKED_OUT: '방장에 의해 로비에서 강퇴되었습니다.',
 } as const;
 
 export const LOBBY_CHAT_POLICY = {

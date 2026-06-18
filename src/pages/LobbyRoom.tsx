@@ -35,7 +35,9 @@ import {
 } from '../hooks/useLobbyDetail';
 import { useLobbyChat } from '../hooks/useLobbyChat';
 import { useLobbySocket } from '../hooks/useLobbySocket';
+import { SOCKET_PUBLISH } from '../constants/socketEvents';
 import { useAuthStore } from '../store/useAuthStore';
+import { useSocketStore } from '../store/useSocketStore';
 import type { MapSummary } from '../types/map';
 import type { UpdateLobbySettingsRequest } from '../types/lobby';
 import {
@@ -160,11 +162,17 @@ export function LobbyRoom() {
     const queryClient = useQueryClient();
     const userId = useAuthStore((state) => state.userId);
     const userIdentifier = useAuthStore((state) => state.userIdentifier);
-    const lobbyChat = useLobbyChat(inviteCode);
-    const { gameStatus } = useLobbySocket(
-        inviteCode,
-        lobbyChat.handleLobbyMessageBody,
+    const stompClient = useSocketStore((state) => state.stompClient);
+    const connectionStatus = useSocketStore(
+        (state) => state.connectionStatus,
     );
+    const lobbyChat = useLobbyChat(inviteCode);
+    const {
+        gameStatus,
+        kickedOut,
+        requestLobbyInfoRefresh,
+        markLeavingForGame,
+    } = useLobbySocket(inviteCode, lobbyChat.handleLobbyMessageBody);
     const navigatedInviteCodeRef = useRef<string | null>(null);
     const initialStatusCheckedInviteCodeRef = useRef<string | null>(null);
 
@@ -175,11 +183,13 @@ export function LobbyRoom() {
             }
 
             navigatedInviteCodeRef.current = targetInviteCode;
+            // 게임 화면 전환은 퇴장이 아니므로 cleanup leave를 억제한다.
+            markLeavingForGame();
             navigate(GAME_ROUTES.PLAY(targetInviteCode), {
                 replace: true,
             });
         },
-        [navigate],
+        [navigate, markLeavingForGame],
     );
 
     useEffect(() => {
@@ -274,8 +284,57 @@ export function LobbyRoom() {
         };
     }, [lobbyDetail]);
 
+    // 강퇴 대상으로 감지되면 사유를 잠깐 보여준 뒤 로비 목록으로 내보낸다.
+    // (사유 메시지는 렌더에서 kickedOut으로 파생하고, 여기서는 이동만 예약한다)
+    useEffect(() => {
+        if (!kickedOut) {
+            return;
+        }
+
+        const timer = window.setTimeout(() => {
+            navigate(LOBBY_ROUTES.LIST, { replace: true });
+        }, 1500);
+
+        return () => {
+            window.clearTimeout(timer);
+        };
+    }, [kickedOut, navigate]);
+
     const handleNavigateLobbyList = () => {
         navigate(LOBBY_ROUTES.LIST);
+    };
+
+    const handleKick = (targetUserIdentifier: string) => {
+        if (
+            !isHost ||
+            !inviteCode ||
+            !stompClient ||
+            connectionStatus !== 'connected'
+        ) {
+            return;
+        }
+
+        const targetPlayer = lobbyDetail?.players.find(
+            (player) => player.userIdentifier === targetUserIdentifier,
+        );
+        const targetName =
+            targetPlayer?.nickname?.trim() || targetUserIdentifier;
+
+        if (!window.confirm(LOBBY_ROOM_COPY.KICK_CONFIRM(targetName))) {
+            return;
+        }
+
+        try {
+            stompClient.publish({
+                destination: SOCKET_PUBLISH.LOBBY_KICK(inviteCode),
+                body: JSON.stringify({ targetUserIdentifier }),
+            });
+        } catch (error) {
+            setActionErrorMessage({
+                inviteCode,
+                message: getErrorMessage(error, LOBBY_ROOM_COPY.KICK_FAILED),
+            });
+        }
     };
 
     const invalidateLobbyDetail = async () => {
@@ -286,6 +345,15 @@ export function LobbyRoom() {
         await queryClient.invalidateQueries({
             queryKey: lobbyDetailQueryKey(inviteCode),
         });
+    };
+
+    // 로비 정보 변경 후 전 참가자 갱신을 서버에 요청한다.
+    // BE가 REFRESH_LOBBY_INFO를 브로드캐스트하면 본인 포함 전원이 재조회한다.
+    // 미연결 등으로 요청을 못 보내면 본인만이라도 즉시 갱신한다(폴백).
+    const refreshLobbyAfterMutation = async () => {
+        if (!requestLobbyInfoRefresh()) {
+            await invalidateLobbyDetail();
+        }
     };
 
     const readyMutation = useMutation({
@@ -301,7 +369,7 @@ export function LobbyRoom() {
             setActionErrorMessage(null);
         },
         onSuccess: async () => {
-            await invalidateLobbyDetail();
+            await refreshLobbyAfterMutation();
         },
         onError: (mutationError) => {
             if (!inviteCode) {
@@ -331,7 +399,7 @@ export function LobbyRoom() {
             setActionErrorMessage(null);
         },
         onSuccess: async () => {
-            await invalidateLobbyDetail();
+            await refreshLobbyAfterMutation();
         },
         onError: (mutationError) => {
             if (!inviteCode) {
@@ -361,7 +429,7 @@ export function LobbyRoom() {
             setActionErrorMessage(null);
         },
         onSuccess: async () => {
-            await invalidateLobbyDetail();
+            await refreshLobbyAfterMutation();
         },
         onError: (mutationError) => {
             if (!inviteCode) {
@@ -549,8 +617,10 @@ export function LobbyRoom() {
             : hostStartGuideMessage;
     const currentActionMessage =
         actionMessage?.inviteCode === inviteCode ? actionMessage.message : null;
-    const currentActionErrorMessage =
-        actionErrorMessage?.inviteCode === inviteCode
+    // 강퇴 안내는 다른 액션 에러보다 우선해서 보여준다.
+    const currentActionErrorMessage = kickedOut
+        ? LOBBY_ROOM_COPY.KICKED_OUT
+        : actionErrorMessage?.inviteCode === inviteCode
             ? actionErrorMessage.message
             : null;
 
@@ -614,6 +684,8 @@ export function LobbyRoom() {
                             hostNickname={
                                 lobbyDetail.hostNickname ?? null
                             }
+                            canKick={isHost && isWaitingLobby}
+                            onKick={handleKick}
                         />
                     }
                     settingsCard={

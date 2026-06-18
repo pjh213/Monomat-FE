@@ -24,7 +24,9 @@ import {
     LOBBY_QUERY_PARAMS,
     LOBBY_ROUTES,
 } from '../constants/lobby';
+import { SOCKET_PUBLISH } from '../constants/socketEvents';
 import { useAuthStore } from '../store/useAuthStore';
+import { useSocketStore } from '../store/useSocketStore';
 import type { CreateLobbyRequest } from '../types/lobby';
 import type { MapDetailResponse, MapSummary } from '../types/map';
 import { getAvatarColor } from '../utils/avatarColor';
@@ -337,6 +339,8 @@ function VisibilityOption({
 
 export function LobbyCreate() {
     const navigate = useNavigate();
+    const stompClient = useSocketStore((state) => state.stompClient);
+    const connectionStatus = useSocketStore((state) => state.connectionStatus);
     const [searchParams] = useSearchParams();
     const [formState, setFormState] =
         useState<LobbyCreateFormState>(DEFAULT_FORM_STATE);
@@ -476,6 +480,17 @@ export function LobbyCreate() {
             setErrorMessage(null);
 
             const response = await createLobby(request);
+
+            // 로비 목록 화면을 보고 있는 다른 사용자들에게 실시간 갱신을 알린다.
+            if (stompClient && connectionStatus === 'connected') {
+                try {
+                    stompClient.publish({
+                        destination: SOCKET_PUBLISH.LOBBY_CREATE,
+                    });
+                } catch (error) {
+                    console.error('[LobbyCreate] 로비 생성 알림 송신 실패:', error);
+                }
+            }
 
             navigate(LOBBY_ROUTES.ROOM(response.inviteCode));
         } catch (error) {

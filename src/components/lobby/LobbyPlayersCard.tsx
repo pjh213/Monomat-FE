@@ -1,3 +1,5 @@
+import { UserX } from 'lucide-react';
+
 import { LOBBY_ROOM_COPY } from '../../constants/lobby';
 import { getAvatarColor } from '../../utils/avatarColor';
 
@@ -10,6 +12,8 @@ interface LobbyPlayersCardProps {
     currentUserIdentifier: string | null;
     hostId: string;
     hostNickname: string | null;
+    canKick?: boolean;
+    onKick?: (targetUserIdentifier: string) => void;
 }
 
 function maskUserIdentifier(userIdentifier: string) {
@@ -82,11 +86,15 @@ function PlayerSlot({
     currentUserIdentifier,
     hostId,
     hostNickname,
+    canKick = false,
+    onKick,
 }: {
     player: LobbyPlayerResponse;
     currentUserIdentifier: string | null;
     hostId: string;
     hostNickname: string | null;
+    canKick?: boolean;
+    onKick?: (targetUserIdentifier: string) => void;
 }) {
     const isCurrentUser =
         player.userIdentifier === currentUserIdentifier;
@@ -100,15 +108,28 @@ function PlayerSlot({
         hostNickname,
     );
     const avatarColor = getAvatarColor(player.userIdentifier);
+    const isKickable = canKick && !isCurrentUser && !isHost;
 
     return (
         <li
-            className={`flex h-[110px] min-w-0 flex-col items-center rounded-lg border bg-white px-3 py-[15px] text-center ${
+            className={`relative flex h-[110px] min-w-0 flex-col items-center rounded-lg border bg-white px-3 py-[15px] text-center ${
                 isCurrentUser
                     ? 'border-[var(--monomat-primary)] ring-2 ring-[color:var(--monomat-primary-light)]'
                     : 'border-[color:var(--monomat-border-default)]'
             }`}
         >
+            {isKickable && (
+                <button
+                    type="button"
+                    onClick={() => onKick?.(player.userIdentifier)}
+                    aria-label={LOBBY_ROOM_COPY.KICK_PLAYER_ARIA(displayName)}
+                    title={LOBBY_ROOM_COPY.KICK_PLAYER}
+                    className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full text-[var(--monomat-text-muted)] transition hover:bg-[var(--monomat-danger-light)] hover:text-[var(--monomat-danger)]"
+                >
+                    <UserX size={15} strokeWidth={1.9} />
+                </button>
+            )}
+
             <span
                 className="flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-full text-base font-extrabold leading-none text-white"
                 style={{ backgroundColor: avatarColor }}
@@ -153,6 +174,8 @@ export function LobbyPlayersCard({
     currentUserIdentifier,
     hostId,
     hostNickname,
+    canKick = false,
+    onKick,
 }: LobbyPlayersCardProps) {
     const emptySlotCount = Math.max(maxPlayers - players.length, 0);
 
@@ -176,6 +199,8 @@ export function LobbyPlayersCard({
                             currentUserIdentifier={currentUserIdentifier}
                             hostId={hostId}
                             hostNickname={hostNickname}
+                            canKick={canKick}
+                            onKick={onKick}
                         />
                     ))}
                     {Array.from({ length: emptySlotCount }).map((_, index) => (
